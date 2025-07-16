@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Legal Notification Prompt Generator</title>
+  <style>
+    body { font-family: sans-serif; max-width: 900px; margin: 2em auto; padding: 1em; background: #f9f9f9; }
+    label { display: block; margin-top: 1em; cursor: pointer; }
+    input, select, textarea { width: 100%; padding: 0.4em; margin-top: 0.5em; }
+    input[type="date"], select { width: auto; }
+    textarea { height: 250px; }
+    button { margin-top: 1em; padding: 0.5em 1em; cursor: pointer; }
+    .flag { width: 100px; height: 70px; vertical-align: middle; cursor: pointer; margin-right: 0.5em; border: 2px solid transparent; }
+    .flag.selected { border: 3px solid red; }
+    .hidden { display: none; color: red; }
+    .button-row { margin-top: 1em; display: flex; gap: 1em; align-items: center; flex-wrap: wrap; }
+    .copy-button { background-color: #e0f0ff; border: 1px solid #90caf9; }
+    .yellow-button { background-color: #fff8dc; border: 1px solid #d2b48c; }
+    #copyMsg { margin-top: 1em; color: green; font-weight: bold; }
+    #history { white-space: pre-wrap; background: #f0f0f0; padding: 1em; border: 1px solid #ccc; margin-top: 2em; }
+  </style>
+</head>
+<body>
+  <h1>Legal Notification Prompt Generator</h1>
+  <button onclick="clearInputs()" style="float: right;">Clear All Inputs</button>
+  <label>案件番号: <span id="caseNumber">1</span></label>
+
+  <label>Jurisdiction:<br>
+    <span style="color:red; font-weight:bold;">* Select a jurisdiction by clicking a flag</span><br>
+    <img src="https://flagcdn.com/w80/my.png" alt="Malaysia" class="flag" id="flag-my" onclick="selectFlag('my')">
+    <img src="https://flagcdn.com/w80/sg.png" alt="Singapore" class="flag" id="flag-sg" onclick="selectFlag('sg')">
+    <img src="https://flagcdn.com/w80/jp.png" alt="Japan" class="flag" id="flag-jp" onclick="selectFlag('jp')">
+  </label>
+
+  <label>Date of Dispatch: <input type="date" id="dispatchDate"></label>
+  <label>Incident Date: <input type="date" id="incidentDate">
+    <select id="incidentTime">
+      <option value="">Time</option>
+      <option value="Morning">Morning</option>
+      <option value="Afternoon">Afternoon</option>
+      <option value="Evening">Evening</option>
+    </select>
+  </label>
+
+  <label>Location: <input type="text" id="location"></label>
+
+  <label>Communication Method(s):<br>
+    <input type="checkbox" id="email"> Email
+    <input type="checkbox" id="phone"> Phone
+    <input type="checkbox" id="fax"> Fax
+    <input type="checkbox" id="letter"> Letter
+    <input type="checkbox" id="oral"> Oral
+    <input type="checkbox" id="otherComm" onchange="toggleOther('otherComm','otherCommText','commWarn')"> Other
+    <input type="text" id="otherCommText" class="hidden" placeholder="Please specify">
+    <div id="commWarn" class="hidden">* Please specify 'Other' communication method</div>
+  </label>
+
+  <label>Incident Details:<textarea id="incidentDetails"></textarea></label>
+  <label>Monetary Demand: <input type="text" id="moneyDemand"></label>
+  <label>Other Orders: <input type="text" id="otherOrders"></label>
+  <label>Legal Reference:
+    <select id="legalRef">
+      <option value="Include">Include</option>
+      <option value="Do not include">Do not include</option>
+    </select>
+  </label>
+
+  <label>Recipient:<br>
+    <input type="text" id="recipientName" placeholder="氏名">
+    <input type="text" id="recipientCompany" placeholder="会社">
+  </label>
+
+  <label>Sender:<br>
+    <input type="text" id="senderName" placeholder="氏名">
+    <input type="text" id="senderCompany" placeholder="会社">
+  </label>
+
+  <label>Page Requirement: <input type="text" id="pages"></label>
+
+  <div class="button-row">
+    <button onclick="generatePrompt()">Generate Prompt</button>
+    <button class="copy-button" onclick="manualCopy()">Copy Prompt</button>
+    <button class="copy-button" onclick="downloadLog()">Download All Prompts</button>
+    <button class="yellow-button" onclick="saveAndNext()">Save and Next</button>
+    <button class="yellow-button" onclick="goBackOne()">Previous Prompt</button>
+  </div>
+
+  <h3>Generated Prompt</h3>
+  <textarea id="output" readonly></textarea>
+  <div id="copyMsg"></div>
+
+  <h3>Prompt History</h3>
+  <div id="history"></div>
+
+  <script>
+    let jurisdiction = '';
+    let promptLog = [];
+    let currentCase = 1;
+
+    function selectFlag(code) {
+      jurisdiction = (code === 'my') ? 'Malaysia' : (code === 'sg') ? 'Singapore' : 'Japan';
+      ['my','sg','jp'].forEach(id => document.getElementById('flag-' + id).classList.remove('selected'));
+      document.getElementById('flag-' + code).classList.add('selected');
+    }
+
+    function toggleOther(boxId, inputId, warnId) {
+      const box = document.getElementById(boxId);
+      document.getElementById(inputId).classList.toggle('hidden', !box.checked);
+      document.getElementById(warnId).classList.toggle('hidden', !box.checked);
+    }
+
+    function generatePrompt() {
+      const rName = document.getElementById('recipientName').value.trim();
+      const rComp = document.getElementById('recipientCompany').value.trim();
+      const sName = document.getElementById('senderName').value.trim();
+      const sComp = document.getElementById('senderCompany').value.trim();
+      const recipient = rName + (rComp ? `（${rComp}）` : '');
+      const sender = sName + (sComp ? `（${sComp}）` : '');
+      const dispatch = document.getElementById('dispatchDate').value;
+      const date = document.getElementById('incidentDate').value;
+      const time = document.getElementById('incidentTime').value;
+      const location = document.getElementById('location').value;
+      const details = document.getElementById('incidentDetails').value;
+      const money = document.getElementById('moneyDemand').value;
+      const orders = document.getElementById('otherOrders').value;
+      const legal = document.getElementById('legalRef').value;
+      const pages = document.getElementById('pages').value;
+      const comms = ['email','phone','fax','letter','oral']
+        .filter(id => document.getElementById(id).checked);
+      if (document.getElementById('otherComm').checked) {
+        const other = document.getElementById('otherCommText').value.trim();
+        if (other) comms.push('Other: ' + other);
+      }
+
+      let prompt = '';
+      if (jurisdiction === 'Japan') {
+        prompt =
+`案件番号: ${currentCase}
+受取人: ${recipient}
+ChatGPT、以下の情報に基づいて、日本の内容証明郵便の文案を作成してください（※季節の挨拶・拝啓など不要。他言語で書かれた場合、法管轄地の言語に合わせてください。出力画面は一切の記号・文字装飾使用禁止。棒線などは改行で対応。プレーンテキストのみで段落間隔を空けてください）。
+
+法管轄地: 日本
+送付日: ${dispatch}
+
+【事案の概要】
+${date}（${time}）、${location}において、以下のような伝達方法を通じて行いました。
+${comms.map(c => `- ${c}`).join('\n')}
+
+【具体的内容】
+${details}
+
+【請求内容】
+- 金銭: ${money}
+- その他命令: ${orders}
+
+【法的根拠の記載】
+${legal}
+
+【ページ指定】
+${pages}
+
+送付人: ${sender}`;
+      } else {
+        prompt =
+`Case No: ${currentCase}
+To: ${recipient}
+
+ChatGPT, based on the following information, please generate a legal notification document. Do not include seasonal greetings or formal openings. Use no symbols or text decorations. Avoid lines or separators; instead, use blank lines between paragraphs to improve readability. If written in another language, please adapt it to the language used in the jurisdiction.
+
+Jurisdiction: ${jurisdiction}
+Date of Dispatch: ${dispatch}
+
+Incident Date and Time: ${date} (${time})
+Location: ${location}
+Communication Method(s): ${comms.join(', ')}
+Details: ${details}
+Monetary Demand: ${money}
+Other Orders: ${orders}
+Include Legal References: ${legal}` + (legal === 'Include' ? `
+* Use authoritative legal language and cite local laws relevant to the content. Ensure compliance with ${jurisdiction} law.` : '') + `
+
+Page Requirement: ${pages}
+
+From: ${sender}`;
+      }
+
+      const out = document.getElementById('output');
+      out.value = prompt;
+      out.select();
+      document.execCommand('copy');
+      document.getElementById('copyMsg').textContent = 'Prompt copied successfully.';
+    }
+
+    function manualCopy() {
+      const out = document.getElementById('output');
+      out.select();
+      document.execCommand('copy');
+      document.getElementById('copyMsg').textContent = 'Prompt copied successfully (manual).';
+    }
+
+    function saveAndNext() {
+      const prompt = document.getElementById('output').value;
+      if (prompt.trim() !== '') {
+        promptLog.push(prompt);
+        updateHistory();
+        currentCase++;
+        document.getElementById('caseNumber').textContent = currentCase;
+      }
+      clearInputs();
+      document.getElementById('output').value = '';
+      document.getElementById('copyMsg').textContent = 'Saved and cleared for next entry.';
+    }
+
+    function goBackOne() {
+      if (promptLog.length > 0) {
+        const lastPrompt = promptLog[promptLog.length - 1];
+        document.getElementById('output').value = lastPrompt;
+        document.getElementById('copyMsg').textContent = 'Previous prompt loaded.';
+      }
+    }
+
+    function updateHistory() {
+      document.getElementById('history').textContent = promptLog.join('\n\n---\n\n');
+    }
+
+    function downloadLog() {
+      const blob = new Blob([promptLog.join('\n\n---\n\n')], {type: 'text/plain'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'prompt_log.txt';
+      a.click();
+    }
+
+    function clearInputs() {
+      document.getElementById('dispatchDate').value = '';
+      document.getElementById('incidentDate').value = '';
+      document.getElementById('incidentTime').value = '';
+      document.getElementById('location').value = '';
+      ['email','phone','fax','letter','oral','otherComm'].forEach(id => document.getElementById(id).checked = false);
+      document.getElementById('otherCommText').value = '';
+      document.getElementById('otherCommText').classList.add('hidden');
+      document.getElementById('commWarn').classList.add('hidden');
+      document.getElementById('incidentDetails').value = '';
+      document.getElementById('moneyDemand').value = '';
+      document.getElementById('otherOrders').value = '';
+      document.getElementById('legalRef').value = 'Include';
+      document.getElementById('pages').value = '';
+      document.getElementById('recipientName').value = '';
+      document.getElementById('recipientCompany').value = '';
+      document.getElementById('senderName').value = '';
+      document.getElementById('senderCompany').value = '';
+      ['flag-my','flag-sg','flag-jp'].forEach(id => document.getElementById(id).classList.remove('selected'));
+      jurisdiction = '';
+    }
+  </script>
+</body>
+</html>
